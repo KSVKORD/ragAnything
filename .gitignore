@@ -1,0 +1,10 @@
+.venv/
+.env
+rag_storage/
+output/
+test_output/
+__pycache__/
+*.pyc
+*.pyo
+documents/*
+!documents/.gitkeep

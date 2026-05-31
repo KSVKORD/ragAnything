@@ -1,0 +1,9 @@
+Introduction to Retrieval-Augmented Generation (RAG)
+
+Retrieval-Augmented Generation (RAG) is an AI framework that enhances large language models by allowing them to retrieve relevant information from an external knowledge base before generating a response. Unlike standard language models that rely solely on knowledge baked in during training, RAG systems can access up-to-date or domain-specific documents at inference time.
+
+The typical RAG pipeline has three stages. First, documents are chunked and converted into vector embeddings, which are stored in a vector database. Second, when a user submits a query, the system retrieves the most semantically similar chunks from the database using nearest-neighbor search. Third, the retrieved chunks are passed as context to the language model, which uses them to produce a grounded, accurate answer.
+
+RAG is particularly useful in enterprise settings where organizations need to query internal documentation, legal contracts, technical manuals, or customer support records without exposing that data during model training. It also reduces the risk of hallucination because the model can cite the source documents it used to generate its answer.
+
+RAG-Anything extends the standard RAG approach to handle multimodal documents — PDFs, images, spreadsheets, and plain text — by parsing each format into a unified content representation before indexing. This project uses the text-only mode of RAG-Anything, which processes .txt and .md files without requiring any vision or OCR models.
