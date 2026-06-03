@@ -1,6 +1,7 @@
 import os
 import asyncio
 import argparse
+from pathlib import Path
 from functools import partial
 
 from dotenv import load_dotenv
@@ -16,6 +17,8 @@ VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "3072"))
 MINERU_BACKEND = os.getenv("MINERU_BACKEND", "pipeline")
+# Formula recognition (MFR model) is GPU-heavy — disable on machines with <4GB GPU memory
+MINERU_FORMULA = os.getenv("MINERU_FORMULA", "false").lower() == "true"
 
 
 def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
@@ -32,12 +35,10 @@ def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
 def vision_model_func(
     prompt, system_prompt=None, history_messages=[], image_data=None, messages=None, **kwargs
 ):
-    # Pre-built messages format (multimodal VLM enhanced query)
     if messages:
         return openai_complete_if_cache(
             VISION_MODEL, "", messages=messages, api_key=API_KEY, **kwargs
         )
-    # Single image with text prompt
     if image_data:
         return openai_complete_if_cache(
             VISION_MODEL,
@@ -55,7 +56,6 @@ def vision_model_func(
             api_key=API_KEY,
             **kwargs,
         )
-    # No image — fall back to text LLM
     return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
 
 
@@ -66,21 +66,37 @@ embedding_func = EmbeddingFunc(
 )
 
 
-async def main(file_path: str, query: str):
+def collect_documents(path: Path, config: RAGAnythingConfig) -> list[Path]:
+    """Return all supported files under path (file or directory)."""
+    if path.is_file():
+        return [path]
+    extensions = set(config.supported_file_extensions)
+    return sorted(f for f in path.rglob("*") if f.is_file() and f.suffix.lower() in extensions)
+
+
+async def main(path: str, query: str):
     if not API_KEY:
         raise ValueError(
             "OPENAI_API_KEY is not set. Copy .env.example to .env and fill in your key."
         )
 
+    config = RAGAnythingConfig()
     rag = RAGAnything(
-        config=RAGAnythingConfig(),
+        config=config,
         llm_model_func=llm_model_func,
         vision_model_func=vision_model_func,
         embedding_func=embedding_func,
     )
 
-    print(f"Processing: {file_path}")
-    await rag.process_document_complete(file_path=file_path, backend=MINERU_BACKEND)
+    documents = collect_documents(Path(path), config)
+    if not documents:
+        raise ValueError(f"No supported documents found in: {path}")
+
+    for i, doc in enumerate(documents, 1):
+        print(f"[{i}/{len(documents)}] Processing: {doc}")
+        await rag.process_document_complete(
+        file_path=str(doc), backend=MINERU_BACKEND, formula=MINERU_FORMULA
+    )
 
     print(f"\nQuery: {query}")
     result = await rag.aquery(query, mode="hybrid")
@@ -89,7 +105,7 @@ async def main(file_path: str, query: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RAG pipeline")
-    parser.add_argument("file", help="Path to a document (.pdf, .txt, .md, etc.)")
-    parser.add_argument("query", help="Question to ask about the document")
+    parser.add_argument("path", help="Path to a document or a folder of documents")
+    parser.add_argument("query", help="Question to ask about the document(s)")
     args = parser.parse_args()
-    asyncio.run(main(args.file, args.query))
+    asyncio.run(main(args.path, args.query))
