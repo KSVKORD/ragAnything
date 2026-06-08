@@ -1,111 +1,97 @@
-import os
+#!/usr/bin/env python3
+"""CLI for the RAG pipeline.
+
+    python main.py ingest [PATH] [--start N --end M]
+    python main.py query "your question" [--mode naive|local|global|hybrid]
+    python main.py status
+    python main.py preview PATH [--start N --end M]
+    python main.py reset [--yes]
+"""
+import sys
 import asyncio
 import argparse
+from collections import Counter
 from pathlib import Path
-from functools import partial
 
-from dotenv import load_dotenv
-from raganything import RAGAnything, RAGAnythingConfig
-from lightrag.llm.openai import openai_complete_if_cache, openai_embed
-from lightrag.utils import EmbeddingFunc
-
-load_dotenv()
-
-API_KEY = os.getenv("OPENAI_API_KEY")
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
-VISION_MODEL = os.getenv("VISION_MODEL", "gpt-4o")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "3072"))
-MINERU_BACKEND = os.getenv("MINERU_BACKEND", "pipeline")
-# Formula recognition (MFR model) is GPU-heavy — disable on machines with <4GB GPU memory
-MINERU_FORMULA = os.getenv("MINERU_FORMULA", "false").lower() == "true"
+import pipeline as P
 
 
-def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
-    return openai_complete_if_cache(
-        LLM_MODEL,
-        prompt,
-        system_prompt=system_prompt,
-        history_messages=history_messages,
-        api_key=API_KEY,
-        **kwargs,
-    )
+async def cmd_ingest(args):
+    rag = await P.build_rag()
+    docs = P.collect_documents(args.path or P.DOCUMENTS_DIR, rag)
+    if not docs:
+        sys.exit(f"No supported documents found in {args.path or P.DOCUMENTS_DIR}")
+    print(f"Found {len(docs)} document(s).")
+    for i, doc in enumerate(docs, 1):
+        rng = f" (pages {args.start}-{args.end})" if args.start else ""
+        print(f"[{i}/{len(docs)}] {doc.name}{rng}")
+        await P.ingest_one(rag, doc, args.start, args.end)
+    print("Done.")
 
 
-def vision_model_func(
-    prompt, system_prompt=None, history_messages=[], image_data=None, messages=None, **kwargs
-):
-    if messages:
-        return openai_complete_if_cache(
-            VISION_MODEL, "", messages=messages, api_key=API_KEY, **kwargs
-        )
-    if image_data:
-        return openai_complete_if_cache(
-            VISION_MODEL,
-            "",
-            messages=[
-                {"role": "system", "content": system_prompt} if system_prompt else None,
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
-                    ],
-                },
-            ],
-            api_key=API_KEY,
-            **kwargs,
-        )
-    return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
+async def cmd_query(args):
+    rag = await P.build_rag()
+    print(await P.query(rag, args.question, mode=args.mode, top_k=args.top_k))
 
 
-embedding_func = EmbeddingFunc(
-    embedding_dim=EMBEDDING_DIM,
-    max_token_size=8192,
-    func=partial(openai_embed.func, model=EMBEDDING_MODEL, api_key=API_KEY),
-)
+async def cmd_status(args):
+    rag = await P.build_rag()
+    info = await P.status(rag)
+    print("By status:", info["counts"] or "(none)")
+    for d in info["documents"]:
+        print(f"  {str(d['chunks']):>5} chunks  {d['file_path']}")
 
 
-def collect_documents(path: Path, config: RAGAnythingConfig) -> list[Path]:
-    """Return all supported files under path (file or directory)."""
-    if path.is_file():
-        return [path]
-    extensions = set(config.supported_file_extensions)
-    return sorted(f for f in path.rglob("*") if f.is_file() and f.suffix.lower() in extensions)
+async def cmd_preview(args):
+    rag = await P.build_rag()
+    content_list, _ = await P.parse_blocks(rag, args.path, args.start, args.end)
+    print("block types:", dict(Counter(b.get("type") for b in content_list)))
+    drop = [b for b in content_list if P.is_noise(b)]
+    print(f"would drop {len(drop)}:")
+    for b in drop:
+        print(f"  [{b.get('type')}] {((b.get('text') or '').strip()[:90])!r}")
 
 
-async def main(path: str, query: str):
-    if not API_KEY:
-        raise ValueError(
-            "OPENAI_API_KEY is not set. Copy .env.example to .env and fill in your key."
-        )
+async def cmd_reset(args):
+    rag = await P.build_rag()
+    if not args.yes and input("Type YES to delete all indexed data: ").strip().upper() != "YES":
+        print("Cancelled.")
+        return
+    await P.reset(rag)
+    print(f"Cleared workspace={P.RAG_WORKSPACE}.")
 
-    config = RAGAnythingConfig()
-    rag = RAGAnything(
-        config=config,
-        llm_model_func=llm_model_func,
-        vision_model_func=vision_model_func,
-        embedding_func=embedding_func,
-    )
 
-    documents = collect_documents(Path(path), config)
-    if not documents:
-        raise ValueError(f"No supported documents found in: {path}")
+def main():
+    p = argparse.ArgumentParser(description="Multimodal RAG (Qwen API + MinerU + Postgres/Qdrant/Neo4j)")
+    sub = p.add_subparsers(dest="cmd", required=True)
 
-    for i, doc in enumerate(documents, 1):
-        print(f"[{i}/{len(documents)}] Processing: {doc}")
-        await rag.process_document_complete(
-        file_path=str(doc), backend=MINERU_BACKEND, formula=MINERU_FORMULA
-    )
+    pi = sub.add_parser("ingest", help="parse + index a file or folder")
+    pi.add_argument("path", nargs="?", default=None)
+    pi.add_argument("--start", type=int, help="first page, 1-indexed (PDF only)")
+    pi.add_argument("--end", type=int, help="last page, 1-indexed inclusive")
 
-    print(f"\nQuery: {query}")
-    result = await rag.aquery(query, mode="hybrid")
-    print(f"Answer: {result}")
+    pq = sub.add_parser("query", help="ask a question")
+    pq.add_argument("question")
+    pq.add_argument("--mode", default="naive", choices=["naive", "local", "global", "hybrid", "mix"])
+    pq.add_argument("--top-k", type=int, default=5)
+
+    sub.add_parser("status", help="show indexed documents")
+
+    pp = sub.add_parser("preview", help="show parsed block types + what the filter would drop")
+    pp.add_argument("path")
+    pp.add_argument("--start", type=int)
+    pp.add_argument("--end", type=int)
+
+    pr = sub.add_parser("reset", help="wipe the workspace")
+    pr.add_argument("--yes", action="store_true")
+
+    args = p.parse_args()
+    if args.cmd in ("ingest", "preview") and (args.start is None) != (args.end is None):
+        p.error("--start and --end must be given together")
+    fns = {"ingest": cmd_ingest, "query": cmd_query, "status": cmd_status,
+           "preview": cmd_preview, "reset": cmd_reset}
+    asyncio.run(fns[args.cmd](args))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RAG pipeline")
-    parser.add_argument("path", help="Path to a document or a folder of documents")
-    parser.add_argument("query", help="Question to ask about the document(s)")
-    args = parser.parse_args()
-    asyncio.run(main(args.path, args.query))
+    main()

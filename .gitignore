@@ -1,4 +1,3 @@
-.venv/
 .env
 rag_storage/
 output/
@@ -8,3 +7,5 @@ __pycache__/
 *.pyo
 documents/*
 !documents/.gitkeep
+.DS_Store
+DEPLOYMENT_NOTES.md

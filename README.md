@@ -1,111 +1,59 @@
 # RAG-Anything
 
-A multimodal RAG pipeline built on [RAG-Anything](https://github.com/hkuds/rag-anything). Processes documents containing text, tables, charts, graphs, and formulas, and answers questions about them using OpenAI.
+Multimodal RAG over your documents (text, tables, charts, formulas), built on
+[RAG-Anything](https://github.com/hkuds/rag-anything) / LightRAG.
 
-## Prerequisites
+- **LLM + vision + embedding** → Qwen via the DashScope API (OpenAI-compatible)
+- **Document parsing** → MinerU (uses an NVIDIA GPU if available)
+- **Storage** → PostgreSQL (KV + doc-status), Qdrant (vectors), Neo4j (graph)
+- **Interface** → FastAPI HTTP service (`api.py`) + CLI (`main.py`)
 
-- Python 3.10–3.13 (Python 3.14+ is not yet supported by the `mineru` dependency)
-- An [OpenAI API key](https://platform.openai.com/api-keys)
+## Deploy with Docker (server)
 
-## Setup
-
-**1. Clone the repo**
-
-```bash
-git clone <your-repo-url>
-cd ragAnything
-```
-
-**2. Create a virtual environment**
+Requires Docker, the NVIDIA Container Toolkit, and a working `nvidia-smi` on the host.
 
 ```bash
-python3 -m venv .venv
+cp .env.example .env          # set DASHSCOPE_API_KEY (+ region URL); DB hosts are set by compose
+docker compose up -d --build  # app (:8000) + Postgres + Qdrant + Neo4j
+
+# ingest (one-off; put PDFs in ./documents first)
+docker compose run --rm app python3 main.py ingest documents/manual.pdf
+docker compose run --rm app python3 main.py ingest documents/manual.pdf --start 1 --end 20
+
+# query the running service
+curl -s localhost:8000/health
+curl -s -XPOST localhost:8000/query -H 'content-type: application/json' \
+     -d '{"question":"What is data manipulation?","mode":"naive"}'
+curl -s localhost:8000/status
 ```
 
-> If your default `python3` is 3.14 or later, specify a version explicitly:
-> `python3.13 -m venv .venv` or `python3.12 -m venv .venv`
+API: `GET /health`, `POST /query {question,mode,top_k}`, `POST /ingest {path,start?,end?}`, `GET /status`.
 
-**3. Activate the virtual environment**
+Notes:
+- First ingest downloads MinerU models (~GB) into the `modelcache` volume — slow once, cached after.
+- The CUDA base in `Dockerfile` (`12.4.1`) must be ≤ the host driver's CUDA (`nvidia-smi`); lower the tag if needed.
+- The API is unauthenticated — keep it behind a firewall / reverse proxy, or add an API key.
+
+## Run locally (no Docker)
+
+1. **Python 3.10–3.13** (MinerU does not support 3.14+):
+   ```bash
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+2. Start the databases: `docker compose up -d postgres qdrant neo4j`
+3. `cp .env.example .env` → set `DASHSCOPE_API_KEY`; match `QWEN_BASE_URL` to your key's region.
 
 ```bash
-# macOS / Linux
-source .venv/bin/activate
-
-# Windows (Command Prompt)
-.venv\Scripts\activate.bat
-
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-```
-
-**4. Install dependencies**
-
-```bash
-pip install -r requirements.txt
-```
-
-**5. Configure your API key**
-
-```bash
-cp .env.example .env
-# Open .env and replace `your_openai_api_key_here` with your actual key
-```
-
-## Usage
-
-```bash
-python main.py <path-to-file.txt> "Your question here"
-```
-
-**Example using the included sample:**
-
-```bash
-python main.py sample.txt "What is RAG and how does it work?"
-```
-
-The first run downloads MinerU's pipeline models (~first run only) and indexes the document into `rag_storage/`. Subsequent queries on the same document skip parsing and answer directly from the index.
-
-## Configuration
-
-All settings live in `.env` and are read automatically by RAGAnythingConfig:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | — | Required. Your OpenAI API key |
-| `LLM_MODEL` | `gpt-4o-mini` | Chat model for answering queries |
-| `EMBEDDING_MODEL` | `text-embedding-3-large` | Embedding model for indexing |
-| `EMBEDDING_DIM` | `3072` | Must match the embedding model's output dimension |
-| `WORKING_DIR` | `./rag_storage` | Knowledge graph and vector store location |
-| `OUTPUT_DIR` | `./output` | Parsed document output location |
-| `VISION_MODEL` | `gpt-4o` | Vision model for describing charts, graphs, and images |
-| `PARSE_METHOD` | `auto` | `auto` = MinerU picks the best method per document |
-| `MINERU_BACKEND` | `pipeline` | `pipeline` = lightweight, works without a GPU |
-
-## Supported content types
-
-| Content | Handled by |
-|---------|-----------|
-| Text paragraphs | MinerU text extraction |
-| Tables | MinerU table parser → indexed as structured text |
-| Charts / graphs | MinerU image extraction → described by `VISION_MODEL` |
-| Formulas / equations | MinerU MFR model → LaTeX extracted and indexed |
-
-## Project structure
-
-```
-ragAnything/
-├── main.py          # Entry point
-├── sample.txt       # Example document for testing
-├── requirements.txt # Python dependencies
-├── .env.example     # Configuration template (safe to commit)
-├── .env             # Your actual keys and settings (NOT committed)
-├── .gitignore
-└── README.md
+python main.py ingest                       # index ./documents (or a file; --start/--end for PDFs)
+python main.py query "..." --mode hybrid
+python main.py status
+python main.py preview documents/x.pdf      # block types + what the filter drops
+python main.py reset --yes
 ```
 
 ## Notes
 
-- `rag_storage/` and `output/` are generated at runtime and excluded from git.
-- On first run, MinerU downloads layout and formula detection models (~once, then cached).
-- `MINERU_BACKEND=pipeline` works on any machine without a GPU. Switch to `hybrid-auto-engine` if you have a GPU for higher accuracy.
-- Powered by [LightRAG](https://github.com/HKUDS/LightRAG) under the hood.
+- Re-ingesting the same file/range is skipped automatically (content-based dedup).
+- Use `ingest` per document; avoid overlapping page ranges to prevent double-indexing.
+- See `DEPLOYMENT_NOTES.md` for deployment gotchas.

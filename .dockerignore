@@ -1,0 +1,14 @@
+.git
+.gitignore
+.venv
+.env
+.DS_Store
+__pycache__
+*.pyc
+*.pyo
+*.ipynb
+documents
+rag_storage
+output
+test_output
+.claude
