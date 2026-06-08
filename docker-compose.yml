@@ -9,6 +9,7 @@ services:
       POSTGRES_HOST: postgres
       QDRANT_URL: http://qdrant:6333
       NEO4J_URI: bolt://neo4j:7687
+      MINERU_MODEL_SOURCE: modelscope  # MinerU models from ModelScope (China), not HuggingFace
     ports:
       - "8000:8000"
     volumes:

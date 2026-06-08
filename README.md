@@ -34,6 +34,16 @@ Notes:
 - The CUDA base in `Dockerfile` (`12.4.1`) must be ≤ the host driver's CUDA (`nvidia-smi`); lower the tag if needed.
 - The API is unauthenticated — keep it behind a firewall / reverse proxy, or add an API key.
 
+### China networks (no Docker Hub access)
+The repo defaults to a China PyPI mirror (`Dockerfile`) and ModelScope for MinerU models
+(`docker-compose.yml`). Also point Docker at a registry mirror so the DB/CUDA images pull — for
+**rootless** Docker create `~/.config/docker/daemon.json`:
+```json
+{ "registry-mirrors": ["https://<your-id>.mirror.aliyuncs.com"] }
+```
+(Get the URL from Aliyun ACR → 镜像加速器.) Then `systemctl --user restart docker` and deploy as usual.
+Outside China, override the PyPI mirror at build time: `docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple`.
+
 ## Run locally (no Docker)
 
 1. **Python 3.10–3.13** (MinerU does not support 3.14+):
