@@ -27,13 +27,8 @@ services:
         condition: service_started
       neo4j:
         condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    devices:                           # GPU via CDI (rootless); needs cdi enabled in ~/.config/docker/daemon.json
+      - "nvidia.com/gpu=all"
     restart: unless-stopped
 
   postgres:

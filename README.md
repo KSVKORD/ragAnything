@@ -10,7 +10,18 @@ Multimodal RAG over your documents (text, tables, charts, formulas), built on
 
 ## Deploy with Docker (server)
 
-Requires Docker, the NVIDIA Container Toolkit, and a working `nvidia-smi` on the host.
+Requires Docker and a working `nvidia-smi` on the host. The compose file requests the GPU via
+**CDI** (`devices: ["nvidia.com/gpu=all"]`), which works with **rootless** Docker.
+
+GPU one-time host setup (rootless, no sudo):
+```bash
+mkdir -p ~/cdi && nvidia-ctk cdi generate --output=$HOME/cdi/nvidia.yaml
+mkdir -p ~/.config/docker
+printf '{ "features": {"cdi": true}, "cdi-spec-dirs": ["%s/cdi"] }\n' "$HOME" > ~/.config/docker/daemon.json
+systemctl --user restart docker
+docker run --rm --device nvidia.com/gpu=all docker.m.daocloud.io/nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi  # test
+```
+No GPU? Remove the `devices: ["nvidia.com/gpu=all"]` line under `app` — it runs CPU-only (MinerU slower; LLM/embeddings are API calls regardless).
 
 ```bash
 cp .env.example .env          # set DASHSCOPE_API_KEY (+ region URL); DB hosts are set by compose
