@@ -1,4 +1,5 @@
 .env
+data/
 rag_storage/
 output/
 test_output/

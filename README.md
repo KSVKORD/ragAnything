@@ -1,28 +1,4 @@
 # RAG-Anything
-
-Multimodal RAG over your documents (text, tables, charts, formulas), built on
-[RAG-Anything](https://github.com/hkuds/rag-anything) / LightRAG.
-
-- **LLM + vision + embedding** → Qwen via the DashScope API (OpenAI-compatible)
-- **Document parsing** → MinerU (uses an NVIDIA GPU if available)
-- **Storage** → PostgreSQL (KV + doc-status), Qdrant (vectors), Neo4j (graph)
-- **Interface** → FastAPI HTTP service (`api.py`) + CLI (`main.py`)
-
-## Deploy with Docker (server)
-
-Requires Docker and a working `nvidia-smi` on the host. The compose file requests the GPU via
-**CDI** (`devices: ["nvidia.com/gpu=all"]`), which works with **rootless** Docker.
-
-GPU one-time host setup (rootless, no sudo):
-```bash
-mkdir -p ~/cdi && nvidia-ctk cdi generate --output=$HOME/cdi/nvidia.yaml
-mkdir -p ~/.config/docker
-printf '{ "features": {"cdi": true}, "cdi-spec-dirs": ["%s/cdi"] }\n' "$HOME" > ~/.config/docker/daemon.json
-systemctl --user restart docker
-docker run --rm --device nvidia.com/gpu=all docker.m.daocloud.io/nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi  # test
-```
-No GPU? Remove the `devices: ["nvidia.com/gpu=all"]` line under `app` — it runs CPU-only (MinerU slower; LLM/embeddings are API calls regardless).
-
 ```bash
 cp .env.example .env          # set DASHSCOPE_API_KEY (+ region URL); DB hosts are set by compose
 docker compose up -d --build  # app (:8000) + Postgres + Qdrant + Neo4j
@@ -39,19 +15,6 @@ curl -s localhost:8000/status
 ```
 
 API: `GET /health`, `POST /query {question,mode,top_k}`, `POST /ingest {path,start?,end?}`, `GET /status`.
-
-Notes:
-- First ingest downloads MinerU models (~GB) into the `modelcache` volume — slow once, cached after.
-- The CUDA base in `Dockerfile` (`12.4.1`) must be ≤ the host driver's CUDA (`nvidia-smi`); lower the tag if needed.
-- The API is unauthenticated — keep it behind a firewall / reverse proxy, or add an API key.
-
-### China networks (no Docker Hub access)
-All three China blockers are handled by config, no host daemon changes needed:
-- **Images** (DB + CUDA): pulled via the `REGISTRY` prefix in `.env` — defaults to **`docker.m.daocloud.io`** (DaoCloud). Change it to another mirror or `docker.io` as needed; it applies to every image and the build base.
-- **pip** (build): Tsinghua mirror (`Dockerfile` `PIP_INDEX_URL` arg).
-- **MinerU models** (ingest): ModelScope (`MINERU_MODEL_SOURCE` in `docker-compose.yml`).
-
-So in China just keep the defaults and run `docker compose up -d --build`. Outside China, set `REGISTRY=docker.io` in `.env` (and optionally `docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple`).
 
 ## Run locally (no Docker)
 
