@@ -15,7 +15,7 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       MINERU_MODEL_SOURCE: modelscope  # MinerU models from ModelScope (China), not HuggingFace
     ports:
-      - "8000:8000"
+      - "8001:8000"                    # host 8001 -> container 8000 (8000 was taken)
     volumes:
       - ./documents:/app/documents
       - parseout:/app/output
