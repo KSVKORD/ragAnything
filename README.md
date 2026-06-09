@@ -35,14 +35,12 @@ Notes:
 - The API is unauthenticated — keep it behind a firewall / reverse proxy, or add an API key.
 
 ### China networks (no Docker Hub access)
-The repo defaults to a China PyPI mirror (`Dockerfile`) and ModelScope for MinerU models
-(`docker-compose.yml`). Also point Docker at a registry mirror so the DB/CUDA images pull — for
-**rootless** Docker create `~/.config/docker/daemon.json`:
-```json
-{ "registry-mirrors": ["https://<your-id>.mirror.aliyuncs.com"] }
-```
-(Get the URL from Aliyun ACR → 镜像加速器.) Then `systemctl --user restart docker` and deploy as usual.
-Outside China, override the PyPI mirror at build time: `docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple`.
+All three China blockers are handled by config, no host daemon changes needed:
+- **Images** (DB + CUDA): pulled via the `REGISTRY` prefix in `.env` — defaults to **`docker.m.daocloud.io`** (DaoCloud). Change it to another mirror or `docker.io` as needed; it applies to every image and the build base.
+- **pip** (build): Tsinghua mirror (`Dockerfile` `PIP_INDEX_URL` arg).
+- **MinerU models** (ingest): ModelScope (`MINERU_MODEL_SOURCE` in `docker-compose.yml`).
+
+So in China just keep the defaults and run `docker compose up -d --build`. Outside China, set `REGISTRY=docker.io` in `.env` (and optionally `docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple`).
 
 ## Run locally (no Docker)
 

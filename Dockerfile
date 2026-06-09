@@ -1,5 +1,7 @@
 # GPU-capable image. Base CUDA must be <= the host driver's CUDA (check `nvidia-smi`).
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+# REGISTRY lets you pull the base via a mirror (e.g. docker.m.daocloud.io) in China.
+ARG REGISTRY=docker.io
+FROM ${REGISTRY}/nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1
 
