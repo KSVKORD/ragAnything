@@ -1,17 +1,17 @@
 # RAG-Anything
 ```bash
 cp .env.example .env          # set DASHSCOPE_API_KEY (+ region URL); DB hosts are set by compose
-docker compose up -d --build  # app (:8000) + Postgres + Qdrant + Neo4j
+docker compose up -d --build  # app (:8001) + Postgres + Qdrant + Neo4j
 
 # ingest (one-off; put PDFs in ./documents first)
 docker compose run --rm app python3 main.py ingest documents/manual.pdf
 docker compose run --rm app python3 main.py ingest documents/manual.pdf --start 1 --end 20
 
 # query the running service
-curl -s localhost:8000/health
-curl -s -XPOST localhost:8000/query -H 'content-type: application/json' \
+curl -s localhost:8001/health
+curl -s -XPOST localhost:8001/query -H 'content-type: application/json' \
      -d '{"question":"What is data manipulation?","mode":"naive"}'
-curl -s localhost:8000/status
+curl -s localhost:8001/status
 ```
 
 API: `GET /health`, `POST /query {question,mode,top_k}`, `POST /ingest {path,start?,end?}`, `GET /status`.
