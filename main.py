@@ -14,7 +14,6 @@ from collections import Counter
 from pathlib import Path
 
 import pipeline as P
-import metrics
 
 
 async def cmd_ingest(args):
@@ -28,17 +27,11 @@ async def cmd_ingest(args):
         print(f"[{i}/{len(docs)}] {doc.name}{rng}")
         await P.ingest_one(rag, doc, args.start, args.end)
     print("Done.")
-    report = metrics.write_report("ingest")
-    if report:
-        print(f"Performance report: {report}")
 
 
 async def cmd_query(args):
     rag = await P.build_rag()
     print(await P.query(rag, args.question, mode=args.mode, top_k=args.top_k))
-    report = metrics.write_report("query")
-    if report:
-        print(f"Performance report: {report}")
 
 
 async def cmd_status(args):

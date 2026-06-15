@@ -1,7 +1,7 @@
 # RAG-Anything
 ```bash
 cp .env.example .env          # set DASHSCOPE_API_KEY (+ region URL); DB hosts are set by compose
-docker compose up -d --build  # app (:8001) + Postgres + Qdrant + Neo4j
+docker compose up -d --build 
 
 # ingest (one-off; put PDFs in ./documents first)
 docker compose run --rm app python3 main.py ingest documents/manual.pdf
@@ -33,14 +33,6 @@ python main.py status
 python main.py preview documents/x.pdf      # block types + what the filter drops
 python main.py reset --yes
 ```
-
-## Performance reports
-
-Each `ingest`/`query` run records per-stage time + CPU/RAM/GPU usage (each stage labelled,
-e.g. `parse:manual.pdf`, `index:manual.pdf`, `query:naive`) and writes a `.md` + `.json` report
-to `OUTPUT_DIR/reports/` (with Docker: `./data/output/reports/`). The API returns the report path
-in the `/ingest` response. Tune sampling with `METRICS_INTERVAL` (seconds) or change the location
-with `METRICS_DIR`.
 
 ## Notes
 

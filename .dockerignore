@@ -8,6 +8,7 @@ __pycache__
 *.pyo
 *.ipynb
 documents
+data
 rag_storage
 output
 test_output
