@@ -5,6 +5,7 @@ python-dotenv
 httpx
 numpy
 pypdf
+psutil
 # Database clients
 asyncpg
 qdrant-client

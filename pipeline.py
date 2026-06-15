@@ -10,6 +10,8 @@ import httpx
 import numpy as np
 from dotenv import load_dotenv
 
+import metrics
+
 load_dotenv()
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
@@ -156,16 +158,23 @@ async def parse_blocks(rag, path, start=None, end=None):
 
 
 async def ingest_one(rag, path, start=None, end=None):
-    content_list, doc_id = await parse_blocks(rag, path, start, end)
+    name = Path(path).name
+    with metrics.record(f"parse:{name}") as rec:
+        content_list, doc_id = await parse_blocks(rag, path, start, end)
+        rec["extra"]["parsed"] = len(content_list)
     kept = [b for b in content_list if not is_noise(b)]
     dropped = len(content_list) - len(kept)
     print(f"  parsed {len(content_list)} blocks; dropped {dropped} metadata; indexing {len(kept)}")
-    await rag.insert_content_list(content_list=kept, file_path=str(path), doc_id=doc_id)
+    with metrics.record(f"index:{name}") as rec:
+        rec["extra"].update(indexed=len(kept), dropped=dropped)
+        await rag.insert_content_list(content_list=kept, file_path=str(path), doc_id=doc_id)
     return {"file": str(path), "parsed": len(content_list), "dropped": dropped, "indexed": len(kept)}
 
 
 async def query(rag, question, mode="naive", top_k=5):
-    return await rag.aquery(question, mode=mode, top_k=top_k, enable_rerank=False)
+    with metrics.record(f"query:{mode}") as rec:
+        rec["extra"]["top_k"] = top_k
+        return await rag.aquery(question, mode=mode, top_k=top_k, enable_rerank=False)
 
 
 async def status(rag):

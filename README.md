@@ -34,6 +34,14 @@ python main.py preview documents/x.pdf      # block types + what the filter drop
 python main.py reset --yes
 ```
 
+## Performance reports
+
+Each `ingest`/`query` run records per-stage time + CPU/RAM/GPU usage (each stage labelled,
+e.g. `parse:manual.pdf`, `index:manual.pdf`, `query:naive`) and writes a `.md` + `.json` report
+to `OUTPUT_DIR/reports/` (with Docker: `./data/output/reports/`). The API returns the report path
+in the `/ingest` response. Tune sampling with `METRICS_INTERVAL` (seconds) or change the location
+with `METRICS_DIR`.
+
 ## Notes
 
 - Re-ingesting the same file/range is skipped automatically (content-based dedup).

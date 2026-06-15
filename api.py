@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 import pipeline as P
+import metrics
 
 
 @asynccontextmanager
@@ -57,7 +58,7 @@ async def ingest(body: IngestIn):
     if not docs:
         raise HTTPException(404, f"No supported documents found at {target}")
     results = [await P.ingest_one(rag, doc, body.start, body.end) for doc in docs]
-    return {"ingested": results}
+    return {"ingested": results, "report": metrics.write_report("ingest")}
 
 
 @app.get("/status")
