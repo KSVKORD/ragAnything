@@ -3,6 +3,7 @@
 #   one-off ingest: docker compose run --rm app python3 main.py ingest documents/<file>.pdf
 services:
   app:
+    image: raganything-app:latest        # reuse the loaded/saved image offline; build still runs normally if absent or --build
     build:
       context: .
       args:
