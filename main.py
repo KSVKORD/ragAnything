@@ -44,7 +44,7 @@ async def cmd_status(args):
 
 async def cmd_preview(args):
     rag = await P.build_rag()
-    content_list, _ = await P.parse_blocks(rag, args.path, args.start, args.end)
+    content_list = await P.parse_blocks(rag, args.path, args.start, args.end)
     print("block types:", dict(Counter(b.get("type") for b in content_list)))
     drop = [b for b in content_list if P.is_noise(b)]
     print(f"would drop {len(drop)}:")
@@ -62,7 +62,7 @@ async def cmd_reset(args):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Multimodal RAG (Qwen API + MinerU + Postgres/Qdrant/Neo4j)")
+    p = argparse.ArgumentParser(description="Multimodal RAG (Qwen API + dots.ocr + Postgres/Qdrant/Neo4j)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("ingest", help="parse + index a file or folder")

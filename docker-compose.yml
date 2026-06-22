@@ -1,4 +1,4 @@
-# Full stack: app (FastAPI, GPU) + Postgres + Qdrant + Neo4j.
+# Full stack: app (FastAPI) + dots-ocr (parser, GPU) + Postgres + Qdrant + Neo4j.
 #   docker compose up -d --build
 #   one-off ingest: docker compose run --rm app python3 main.py ingest documents/<file>.pdf
 services:
@@ -10,17 +10,16 @@ services:
         REGISTRY: ${REGISTRY:-docker.io}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     env_file: .env
-    environment:                       # override .env DB hosts with compose service names
+    environment:                       # override .env hosts with compose service names
       POSTGRES_HOST: postgres
       QDRANT_URL: http://qdrant:6333
       NEO4J_URI: bolt://neo4j:7687
-      MINERU_MODEL_SOURCE: modelscope  # MinerU models from ModelScope (China), not HuggingFace
+      DOTS_OCR_URL: http://dots-ocr:8000/v1
     ports:
       - "8001:8000"                    # host 8001 -> container 8000 (8000 was taken)
     volumes:
       - ./documents:/app/documents
       - ./data/output:/app/output
-      - ./data/modelcache:/root/.cache  # MinerU/HuggingFace models persist (downloaded once)
     depends_on:
       postgres:
         condition: service_healthy
@@ -28,8 +27,33 @@ services:
         condition: service_started
       neo4j:
         condition: service_healthy
+      dots-ocr:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dots-ocr:                            # document parser: dots.ocr served by vLLM (OpenAI-compatible)
+    image: ${REGISTRY:-docker.io}/rednotehilab/dots.ocr:vllm-openai-v0.9.1
+    command: >
+      /weights
+      --served-model-name model
+      --tensor-parallel-size 1
+      --gpu-memory-utilization 0.9
+      --chat-template-content-format string
+      --trust-remote-code
+    environment:
+      VLLM_USE_MODELSCOPE: "True"      # if pulling by repo id; ignored when serving the local /weights path
+      HF_HUB_OFFLINE: "1"              # never reach HuggingFace
+    volumes:
+      - ./data/dots-weights:/weights   # pre-downloaded from ModelScope (see README)
+      - ./data/dots-cache:/root/.cache
     devices:                           # GPU via CDI (rootless); needs cdi enabled in ~/.config/docker/daemon.json
       - "nvidia.com/gpu=all"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 300s              # vLLM model load is slow
     restart: unless-stopped
 
   postgres:

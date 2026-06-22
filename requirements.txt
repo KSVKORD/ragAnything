@@ -1,10 +1,11 @@
-# Pinned to a known-good pair (see DEPLOYMENT_NOTES.md). Python 3.10–3.13 only (mineru blocks 3.14).
+# Pinned to a known-good pair. Python 3.10–3.13.
 raganything[text]==1.3.1
 lightrag-hku==1.4.16
 python-dotenv
 httpx
 numpy
 pypdf
+pymupdf            # rasterize PDF pages + crop figures for the dots.ocr parser
 # Database clients
 asyncpg
 qdrant-client

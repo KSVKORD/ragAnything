@@ -1,4 +1,4 @@
-"""Core RAG pipeline: Qwen (DashScope API) + MinerU + Postgres/Qdrant/Neo4j.
+"""Core RAG pipeline: Qwen (DashScope API) + dots.ocr + Postgres/Qdrant/Neo4j.
 
 Shared by main.py (CLI) and api.py (HTTP service).
 """
@@ -10,6 +10,8 @@ import httpx
 import numpy as np
 from dotenv import load_dotenv
 
+import dots_ocr
+
 load_dotenv()
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
@@ -18,21 +20,12 @@ def _env(key, default=None):
     return os.getenv(key, default)
 
 
-def _flag(key, default):
-    return str(os.getenv(key, str(default))).strip().lower() in ("1", "true", "yes", "on")
-
-
 API_KEY = _env("DASHSCOPE_API_KEY", "")
 QWEN_BASE_URL = _env("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 QWEN_MODEL = _env("QWEN_MODEL", "qwen3.5-flash")
 EMBEDDING_MODEL = _env("EMBEDDING_MODEL", "text-embedding-v4")
 EMBEDDING_DIM = int(_env("EMBEDDING_DIM", "1024"))
 MAX_TOKENS = int(_env("MAX_TOKENS", "8192"))
-
-MINERU_BACKEND = _env("MINERU_BACKEND", "pipeline")
-PARSE_METHOD = _env("PARSE_METHOD", "auto")
-MINERU_FORMULA = _flag("MINERU_FORMULA", True)
-MINERU_TABLE = _flag("MINERU_TABLE", False)
 
 DOCUMENTS_DIR = _env("DOCUMENTS_DIR", "./documents")
 WORKING_DIR = _env("WORKING_DIR", "./rag_storage")
@@ -90,14 +83,6 @@ async def qwen_embed(texts):
     return np.array(out, dtype=np.float32)
 
 
-def _mineru_device():
-    try:
-        import torch
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except Exception:
-        return "cpu"
-
-
 async def build_rag():
     """Construct and initialise a RAGAnything instance backed by the databases."""
     if not API_KEY or API_KEY.startswith("your_"):
@@ -105,14 +90,12 @@ async def build_rag():
     from raganything import RAGAnything, RAGAnythingConfig
     from lightrag.utils import EmbeddingFunc
 
-    os.environ["MINERU_DEVICE_MODE"] = _mineru_device()
     config = RAGAnythingConfig(
         working_dir=WORKING_DIR,
         parser_output_dir=OUTPUT_DIR,
-        parse_method=PARSE_METHOD,
         enable_image_processing=True,
         enable_table_processing=True,
-        enable_equation_processing=MINERU_FORMULA,
+        enable_equation_processing=True,
         max_concurrent_files=1,
     )
     rag = RAGAnything(
@@ -147,20 +130,16 @@ def collect_documents(path, rag):
 
 
 async def parse_blocks(rag, path, start=None, end=None):
-    """Parse a document into MinerU content blocks (start/end are 1-indexed inclusive, PDFs only)."""
-    kwargs = {"backend": MINERU_BACKEND, "formula": MINERU_FORMULA, "table": MINERU_TABLE}
-    if start is not None and Path(path).suffix.lower() == ".pdf":
-        kwargs.update(start_page=start - 1, end_page=end - 1)
-    return await rag.parse_document(file_path=str(path), output_dir=OUTPUT_DIR,
-                                    parse_method=PARSE_METHOD, **kwargs)
+    """Parse a document into content blocks via dots.ocr (start/end 1-indexed inclusive, PDFs)."""
+    return await dots_ocr.parse_document(str(path), start, end)
 
 
 async def ingest_one(rag, path, start=None, end=None):
-    content_list, doc_id = await parse_blocks(rag, path, start, end)
+    content_list = await parse_blocks(rag, path, start, end)
     kept = [b for b in content_list if not is_noise(b)]
     dropped = len(content_list) - len(kept)
     print(f"  parsed {len(content_list)} blocks; dropped {dropped} metadata; indexing {len(kept)}")
-    await rag.insert_content_list(content_list=kept, file_path=str(path), doc_id=doc_id)
+    await rag.insert_content_list(content_list=kept, file_path=str(path))
     return {"file": str(path), "parsed": len(content_list), "dropped": dropped, "indexed": len(kept)}
 
 
