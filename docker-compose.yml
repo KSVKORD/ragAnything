@@ -34,7 +34,7 @@ services:
   dots-ocr:                            # document parser: dots.ocr served by vLLM (OpenAI-compatible)
     image: ${REGISTRY:-docker.io}/rednotehilab/dots.ocr:vllm-openai-v0.9.1
     command: >
-      /weights
+      --model /weights
       --served-model-name model
       --tensor-parallel-size 1
       --gpu-memory-utilization 0.9
