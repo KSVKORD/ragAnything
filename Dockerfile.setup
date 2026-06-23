@@ -1,0 +1,9 @@
+# "Setup" image: a tiny carrier for the orchestration files (docker-compose.yml + .env.example +
+# README) so they travel via `docker pull` instead of git clone. Extract them with:
+#   docker run --rm -v "$PWD":/out ksvkord/raganything-setup
+ARG REGISTRY=docker.io
+FROM ${REGISTRY}/library/busybox
+COPY docker-compose.yml .env.example README.md /setup/
+CMD ["sh","-c","cp /setup/docker-compose.yml /setup/.env.example /setup/README.md /out/ 2>/dev/null \
+  && echo 'Wrote docker-compose.yml, .env.example, README.md to the mounted directory.' \
+  || echo 'Mount a target dir at /out, e.g.: docker run --rm -v \"$PWD\":/out <this-image>'"]
