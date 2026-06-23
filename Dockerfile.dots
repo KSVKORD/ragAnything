@@ -1,0 +1,6 @@
+# dots.ocr parser image with the model weights baked in (for offline / pull-based deploy).
+# Build context is the weights dir so the COPY picks them up and .dockerignore (which excludes data/) doesn't apply:
+#   docker build -f Dockerfile.dots -t raganything-dotsocr:latest --build-arg REGISTRY=$REGISTRY ./data/dots-weights
+ARG REGISTRY=docker.io
+FROM ${REGISTRY}/vllm/vllm-openai:v0.11.0
+COPY . /weights

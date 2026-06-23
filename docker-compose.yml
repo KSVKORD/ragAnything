@@ -3,7 +3,7 @@
 #   one-off ingest: docker compose run --rm app python3 main.py ingest documents/<file>.pdf
 services:
   app:
-    image: raganything-app:latest        # reuse the loaded/saved image offline; build still runs normally if absent or --build
+    image: ${APP_IMAGE:-raganything-app:latest}   # local build by default; set to a Docker Hub repo to pull/load prebuilt
     build:
       context: .
       args:
@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   dots-ocr:                            # document parser: dots.ocr served by vLLM (OpenAI-compatible)
-    image: ${REGISTRY:-docker.io}/vllm/vllm-openai:v0.11.0   # 0.11.0 natively supports dots.ocr-1.5
+    image: ${DOTS_IMAGE:-raganything-dotsocr:latest}   # weights baked in (Dockerfile.dots); set to a Docker Hub repo to pull/load
     command: >
       --model /weights
       --served-model-name model
@@ -41,10 +41,9 @@ services:
       --chat-template-content-format string
       --trust-remote-code
     environment:
-      VLLM_USE_MODELSCOPE: "True"      # if pulling by repo id; ignored when serving the local /weights path
+      VLLM_USE_MODELSCOPE: "True"      # if pulling by repo id; ignored when serving the baked /weights path
       HF_HUB_OFFLINE: "1"              # never reach HuggingFace
     volumes:
-      - ./data/dots-weights:/weights   # pre-downloaded from ModelScope (see README)
       - ./data/dots-cache:/root/.cache
     devices:                           # GPU via CDI (rootless); needs cdi enabled in ~/.config/docker/daemon.json
       - "nvidia.com/gpu=all"
