@@ -1,0 +1,16 @@
+# All-in-one OFFLINE bundle image: carries a docker-save of ALL 5 runtime images
+# (app + dots-ocr + postgres + qdrant + neo4j) PLUS docker-compose.yml + .env.example.
+# One `docker pull` of this image = the entire offline payload, databases included.
+#
+# Two-step build (the tar must exist before the build):
+#   docker save -o rag-images.tar $(docker compose config --images)
+#   docker build -f Dockerfile.bundle -t raganything-bundle:latest --build-arg REGISTRY=docker.m.daocloud.io .
+#
+# Use it on ANY machine (extracts the payload to the current dir):
+#   docker run --rm -v "$PWD":/out raganything-bundle
+ARG REGISTRY=docker.io
+FROM ${REGISTRY}/library/busybox
+COPY rag-images.tar docker-compose.yml .env.example README.md /bundle/
+CMD ["sh","-c","cp /bundle/rag-images.tar /bundle/docker-compose.yml /bundle/.env.example /bundle/README.md /out/ \
+  && echo 'Extracted rag-images.tar + docker-compose.yml + .env.example to the mounted dir.' \
+  && echo 'Next: docker load -i rag-images.tar  ;  cp .env.example .env (set DASHSCOPE_API_KEY)  ;  docker compose up -d'"]
